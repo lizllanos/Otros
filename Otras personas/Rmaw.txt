@@ -1,0 +1,191 @@
+        ###############################################################################################
+                      ########  ##     ##    ###    ##      ##  ######   ######## ##    ## 
+                      ##     ## ###   ###   ## ##   ##  ##  ## ##    ##  ##       ###   ## 
+                      ##     ## #### ####  ##   ##  ##  ##  ## ##        ##       ####  ## 
+                      ########  ## ### ## ##     ## ##  ##  ## ##   #### ######   ## ## ## 
+                      ##   ##   ##     ## ######### ##  ##  ## ##    ##  ##       ##  #### 
+                      ##    ##  ##     ## ##     ## ##  ##  ## ##    ##  ##       ##   ### 
+                      ##     ## ##     ## ##     ##  ###  ###   ######   ######## ##    ## 
+        ###############################################################################################
+###Victor Hugo Patino Bravo
+rm(list=ls())
+
+library("RMAWGEN")
+fix(ComprehensivePrecipitationGenerator)
+
+rutOrigen2=setwd("//dapadfs/workspace_cluster_6/TRANSVERSAL_PROJECTS/MADR/COMPONENTE_2/CLIMA/SERIES_DIARIAS_SIN_LLENAR/TestSBRItoESOL/Monteria/")
+rutOrigen2=setwd("//dapadfs/workspace_cluster_6/TRANSVERSAL_PROJECTS/MADR/COMPONENTE_2/CLIMA/SERIES_DIARIAS_SIN_LLENAR/TestSBRItoESOL/Monteria/")
+rutDestino2="//dapadfs/workspace_cluster_6/TRANSVERSAL_PROJECTS/MADR/COMPONENTE_2/CLIMA/SERIES_DIARIAS_RELLENAS/TestSBRItoESOL/Monteria/"
+
+#IMPUTACION<-function(h){
+  
+#rutOrigen2=setwd(paste0(rutOrigen,"/",h))###No borrar alguna de estas dos lineas repetidas
+#rutOrigen2=setwd(paste0(rutOrigen,"/",h))###Debido a un inconveniente, se coloca dos veces la especificación de la ruta para que realmente sea reconocida
+#rutDestino2=(paste0(rutDestino,h,"/"))
+
+year_min <- 2005
+year_max <- 2013
+
+origin <- paste0(year_min,"-1-1")
+valmin <- 1.0
+
+n_GPCA_iter <- 10
+n_GPCA_iteration_residuals <- 10
+n_GPCA_iter_prec <- 20
+n_GPCA_iteration_residuals_prec <- 20
+
+tmax  <- read.csv("tmax_to.csv", header = TRUE, sep = ",",  dec=".")
+tmin  <- read.csv("tmin_to.csv", header = TRUE, sep = ",",  dec=".")
+preci <- read.csv("prec_to.csv", header = TRUE, sep = ",",  dec=".")
+        
+tmax_1=subset(tmax,tmax$year>=year_min & tmax$year<=year_max)
+tmin_1=subset(tmin,tmin$year>=year_min & tmin$year<=year_max)
+precipitation=subset(preci,preci$year>=year_min & preci$year<=year_max)
+   
+station <- names(tmax_1)[-(1:3)]
+  
+stationUSE=station[c(1:5)]
+
+summary(tmax_1[,4:ncol(tmax_1)]);summary(tmin_1[,4:ncol(tmin_1)]);summary(precipitation[,4:ncol(precipitation)])    
+dim(tmax_1);dim(tmin_1);dim(precipitation)
+
+# generation of temperature max and min 
+generation00_temp <- ComprehensiveTemperatureGenerator(station=stationUSE,
+                                                       Tx_all=tmax_1,
+                                                       Tn_all=tmin_1,
+                                                       year_min=year_min,
+                                                       year_max=year_max,
+                                                       p=1,n_GPCA_iteration=n_GPCA_iter,
+                                                       n_GPCA_iteration_residuals=n_GPCA_iteration_residuals,
+                                                       sample="monthly")
+  
+#Use of measured and observed temperature as exogenous variables
+exogen_sim <- cbind(generation00_temp$output$Tx_gen,generation00_temp$output$Tn_gen)
+names(exogen_sim) <- cbind(paste(names(generation00_temp$output$Tx_gen),"_Tx",sep=""),paste(names(generation00_temp$output$Tn_gen),"_Tn",sep=""))
+exogen <- cbind(generation00_temp$input$Tx_mes,generation00_temp$input$Tn_mes)
+names(exogen) <- cbind(paste(names(generation00_temp$input$Tx_mes),"_Tx",sep=""),paste(names(generation00_temp$input$Tn_mes),"_Tn",sep=""))
+
+# Precipitation Generator (temperture enters as exogenous variable)
+generation00_prec <- ComprehensivePrecipitationGenerator(station=stationUSE,
+                                                         prec_all=precipitation,
+                                                         year_min=year_min,
+                                                         year_max=year_max,
+                                                         exogen=exogen,
+                                                         exogen_sim=exogen_sim,
+                                                         p=1,n_GPCA_iteration=n_GPCA_iter_prec,
+                                                         n_GPCA_iteration_residuals=n_GPCA_iteration_residuals_prec,
+                                                         sample="monthly",valmin=1)
+
+#-----------------------Gerar Arquivos--------------------------------------------- 
+prec_mes <- generation00_prec$prec_mes
+prec_gen <- generation00_prec$prec_gen
+
+tmin_mes <-generation00_temp$input$Tn_mes
+tmin_gen <-generation00_temp$out$Tn_gen
+
+tmax_mes <-generation00_temp$input$Tx_mes
+tmax_gen <-generation00_temp$out$Tx_gen
+
+test = names(prec_gen)
+teste_min <- names(tmin_gen)
+teste_max <- names(tmax_gen)
+
+data_genPrec <- extractmonths(data=generation00_prec$prec_gen,when=c("Jan", "Feb", "Mar", "Apr","May","Jun","Jul","Aug","Sep", "Oct", "Nov", "Dec"),origin)
+data_genTmin <- extractmonths(data=generation00_temp$out$Tn_gen,when=c("Jan", "Feb", "Mar", "Apr","May","Jun","Jul","Aug","Sep", "Oct", "Nov", "Dec"),origin)
+data_genTmax <- extractmonths(data=generation00_temp$out$Tx_gen,when=c("Jan", "Feb", "Mar", "Apr","May","Jun","Jul","Aug","Sep", "Oct", "Nov", "Dec"),origin)
+        
+#------------------------------Salvando Arquivo------------------------------------
+archPrec=list(0)
+archTmax=list(0)
+archTmin=list(0)
+        archPrec2=list(0)
+        archTmax2=list(0)
+        archTmin2=list(0)
+precipitation_Comp=precipitation[stationUSE]
+tmax_Comp=tmax_1[stationUSE]
+tmin_Comp=tmin_1[stationUSE]
+
+    for(i in 1:length(stationUSE)){
+      
+      Modif=rep("NO",dim(tmax_1)[1])
+      Modif1=rep("NO",dim(tmax_1)[1])
+      Modif2=rep("NO",dim(tmax_1)[1])
+      
+      posPrec=which(is.na(precipitation[stationUSE[i]]))
+      precipitation_Comp[[i]][posPrec]=data_genPrec[[i]][posPrec]#Fusion
+      Modif[posPrec]="SI"
+      archPrec[[i]]=cbind(precipitation[,1:3],precipitation_Comp[[i]],Modif)#para llevar las fuciones con indicador a varios txt
+      
+      postmax=which(is.na(tmax_1[stationUSE[i]]))
+      tmax_Comp[[i]][postmax]=data_genTmax[[i]][postmax]
+      Modif1[postmax]="SI"
+      archTmax[[i]]=cbind(tmax_1[,1:3],tmax_Comp[[i]],Modif1)
+      
+      postmin=which(is.na(tmin_1[stationUSE[i]]))
+      tmin_Comp[[i]][postmin]=data_genTmin[[i]][postmin]
+      Modif2[postmin]="SI"
+      archTmin[[i]]=cbind(tmin_1[,1:3],tmin_Comp[[i]],Modif2)
+    
+    datPrec=as.Date(paste0(archPrec[[i]][,1],"/", archPrec[[i]][,2],"/",archPrec[[i]][,3]),format="%m/%d/%Y")
+    archPrec2[[i]] =data.frame(datPrec,archPrec[[i]][4:5]); colnames(archPrec2[[i]])=c("Dates","Value","Modif")
+    data_genPrec[[i]]=data.frame(datPrec,data_genPrec[[i]]); colnames(data_genPrec[[i]])=c("Dates","Value")
+      
+    datTmax=as.Date(paste0(archTmax[[i]][,1],"/", archTmax[[i]][,2],"/",archTmax[[i]][,3]),format="%m/%d/%Y")
+    archTmax2[[i]] =data.frame(datTmax,archTmax[[i]][4:5]); colnames(archTmax2[[i]])=c("Dates","Value","Modif")
+    data_genTmax[[i]]=data.frame(datTmax,data_genTmax[[i]]); colnames(data_genTmax[[i]])=c("Dates","Value")
+    
+    datTmin=as.Date(paste0(archTmin[[i]][,1],"/", archTmin[[i]][,2],"/",archTmin[[i]][,3]),format="%m/%d/%Y")
+    archTmin2[[i]] =data.frame(datTmin,archTmin[[i]][4:5]); colnames(archTmin2[[i]])=c("Dates","Value","Modif")
+    data_genTmin[[i]]=data.frame(datTmin,data_genTmin[[i]]); colnames(data_genTmin[[i]])=c("Dates","Value")
+      
+    write.table(archPrec2[[i]],paste0(rutDestino2,test[i],"_RAIN_FUS.txt"), sep = "\t", row.names = F,col.names = TRUE)
+    write.table(archTmax2[[i]],paste0(rutDestino2,test[i],"_TMAX_FUS.txt"), sep = "\t", row.names = F,col.names = TRUE)
+    write.table(archTmin2[[i]],paste0(rutDestino2,test[i],"_TMIN_FUS.txt"), sep = "\t", row.names = F,col.names = TRUE)
+
+      write.table(data_genPrec[[i]],paste0(rutDestino2,test[i],"_RAIN_EST.txt"), sep = "\t", row.names = F,col.names = TRUE)
+      write.table(data_genTmax[[i]],paste0(rutDestino2,test[i],"_TMAX_EST.txt"), sep = "\t", row.names = F,col.names = TRUE)
+      write.table(data_genTmin[[i]],paste0(rutDestino2,test[i],"_TMIN_EST.txt"), sep = "\t", row.names = F,col.names = TRUE)
+      
+    }
+####Aqui guardo los *.csv de las fuciones, donde se conservan los valores originales
+
+        precipitacionCSV=do.call(cbind,precipitation_Comp);tempMaxi=do.call(cbind,tmax_Comp);tempMini=do.call(cbind,tmin_Comp)
+        
+        precipitacionCSV <- data.frame(precipitation[,1:3],precipitacionCSV)
+        tempMaxi         <- data.frame(tmax_1[,1:3],tempMaxi)
+        tempMini         <- data.frame(tmin_1[,1:3],tempMini)
+        
+        write.csv(tempMini,paste0(rutDestino2,"tmin_to_FUS.csv"), row.names = F)
+        write.csv(tempMaxi,paste0(rutDestino2,"tmax_to_FUS.csv"), row.names = F)
+        write.csv(precipitacionCSV,paste0(rutDestino2,"prec_to_FUS.csv"), row.names = F)
+
+##################        
+#    for(i in 1:length(stationUSE)){
+#      jpeg(paste0(rutDestino2,"Images/", "prec_",stationUSE[i],"_RAIN_2007-2012.jpeg",sep=""),width = 1150, height = 500)
+#      plot(1:dim(data_genPrec)[1],archPrec[[i]][,2],type="l",col="blue",lwd=1.5,main=paste("prec_",stationUSE[i]),ylim=c(0,100))
+#      lines(1:dim(data_genPrec)[1],precipitation[stationUSE[i]][,1],col="red",lwd=1.5,lty=2)
+#      legend("topright",c("generada","original"),lwd=c(1.5,1.5),col=c("blue","red"))
+#      dev.off()
+      
+#      jpeg(paste0(rutDestino2,"Images/","tmax_",stationUSE[i],"_TMAX_2007-2012.jpeg",sep=""),width = 1150, height = 500)
+#      plot(1:dim(data_genTmax)[1],archTmax[[i]][,2],type="l",col="blue",lwd=1.5,main=paste("tmax_",stationUSE[i]),ylim=c(22,40))
+#      lines(1:dim(data_genTmax)[1],tmax_1[stationUSE[i]][,1],col="red",lwd=1.5,lty=2)
+#      legend("topright",c("generada","original"),lwd=c(1.5,1.5),col=c("blue","red"))
+#      dev.off()
+      
+#      jpeg(paste0(rutDestino2,"Images/","tmin_",stationUSE[i],"_TMIN_2007-2012.jpeg",sep=""),width = 1150, height = 500)
+#      plot(1:dim(data_genTmin)[1],archTmin[[i]][,2],type="l",col="blue",lwd=1.5,main=paste("tmin_",stationUSE[i]),ylim=c(15,30))
+#      lines(1:dim(data_genTmin)[1],tmin_1[stationUSE[i]][,1],col="red",lwd=1.5,lty=2)
+#      legend("topright",c("generada","original"),lwd=c(1.5,1.5),col=c("blue","red"))
+#      dev.off()
+#    }
+
+#}
+
+#for (z in 1:1000){
+#  tryCatch({
+#  IMPUTACION(z)
+#  print(paste0("simulación ",z," existosa"))
+#  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")}
+#  )
+#}

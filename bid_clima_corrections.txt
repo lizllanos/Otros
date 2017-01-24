@@ -1,0 +1,477 @@
+﻿modelos_all <- c("bcc_csm1_1","csiro_mk3_6_0","inm_cm4","miroc_miroc5","mri_cgcm3",
+             "ncc_noresm1_m","mohc_hadgem2_cc","ipsl_cm5b_lr",
+             "mpi_esm_mr","bnu_esm","ipsl_cm5a_lr","miroc_esm_chem",
+             "cccma_canesm2","gfld_esm2g","ipsl_cm5a_mr","gfld_esm2g",
+             "mohc_hadgem2_es","cnrm_cm5","miroc_esm",
+             "mpi_esm_lr")
+
+			 set.seed(1000)
+################################################
+##Proyecto BID corrección data precipitation
+################################################
+
+modelos <- c("bcc_csm1_1", "bnu_esm", "cccma_canesm2", "gfld_esm2g", "inm_cm4", "ipsl_cm5a_lr", "miroc_miroc5",
+			"mpi_esm_mr", "mri_cgcm3", "ncc_noresm1_m")
+
+for(i in 1:10){
+			load(paste("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[i],"/Futuro/Precipitation.Rdat",sep=""))
+						Prec=Srad
+save(Prec,file=paste0("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[i],"/Futuro/Precipitation.Rdat"))
+print(i)
+
+				}
+
+				
+################################################
+##Proyecto BID corrección data radiación solar
+################################################
+
+modelos <- c("bcc_csm1_1", "bnu_esm", "cccma_canesm2", "gfld_esm2g", "inm_cm4", "ipsl_cm5a_lr", "miroc_miroc5",
+			"mpi_esm_mr", "mri_cgcm3", "ncc_noresm1_m")
+
+			
+
+
+for(i in 1:10){
+			
+load(paste("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[i],"/Futuro/Srad_old.RDat",sep=""))
+
+num_pixel <- 8000
+num_años <- 28
+
+for(año in 1:num_años) {
+
+	for(pixel in 1:num_pixel) {
+	
+	    srad <- unlist(Prec[[pixel]][año])/11.5740741
+		pos=which(srad<1.5)
+		srad[pos]=1.5
+		Prec[[pixel]][año]=list(srad)
+    }
+	
+}
+
+Srad=Prec
+save(Srad,file=paste0("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[i],"/Futuro/Srad.Rdat"))
+print(i)
+}
+
+
+####Poner a correr el cambio de nombre para todos los modelos (Prec y Srad)
+				
+################################################
+##Proyecto BID corrección data temperaturas
+################################################
+
+#install.packages("readr")
+#install.packages("tidyr")
+#install.packages("dplyr")
+
+library(readr)
+library(tidyr)
+library(dplyr)
+
+set.seed(1000)
+
+Tmax=list()
+Tmin=list()
+for(j in 1:28){
+  Tmax[[j]]= matrix(NA, nrow = 8199 ,ncol=365)
+  Tmin[[j]]=matrix(NA, nrow = 8199 ,ncol=365)
+}
+
+modelos <- c("bcc_csm1_1", "bnu_esm", "cccma_canesm2", "gfld_esm2g", "inm_cm4", "ipsl_cm5a_lr", "miroc_miroc5",
+			"mpi_esm_mr", "mri_cgcm3", "ncc_noresm1_m")
+			
+
+for(k in 1:10){
+			
+load(paste("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/",modelos[k],".RDat",sep=""))
+
+num_pixel <- 8199
+num_años <- 28
+
+for( pixel in 1:num_pixel){
+
+Tmax_all=list()
+Tmin_all=list()
+
+for(año in 1:num_años) {
+  
+  Tmax_all[[año]]<- TempMax[[año]][pixel,]
+  Tmin_all[[año]]<- TempMin[[año]][pixel,]
+}
+
+test_tmax=do.call("rbind",Tmax_all)
+rownames(test_tmax)=2021:2048
+x=melt(test_tmax)
+
+test_tmin=do.call("rbind",Tmin_all)
+rownames(test_tmin)=2021:2048
+y=melt(test_tmin)
+
+int_tmax= x%>%
+  separate(X2,c("x","day","month"))%>%
+  arrange(X1)
+
+int_tmin= y%>%
+  separate(X2,c("x","day","month"))%>%
+  arrange(X1)
+  
+####Identificacion de casos con tmin>tmax
+pos=which(int_tmax[,5] < int_tmin[,5])
+
+if(length(pos)>0){
+dif=0
+
+for(i in 1:length(pos)){
+  pos_f=c(pos[i]-c(1:5),pos[i]+c(1:5))
+  dif=mean(abs(int_tmax[pos_f[which(pos_f>0 & pos_f<=nrow(int_tmax))],5]-int_tmin[pos_f[which(pos_f>0 & pos_f<=nrow(int_tmin))],5]),na.rm=T)
+  int_tmax[pos[i],5]=int_tmin[pos[i],5]+runif(1,0,dif/2)
+  int_tmin[pos[i],5]=int_tmax[pos[i],5]-runif(1,0,dif/2)
+  }
+
+}
+   
+  
+###Identificación de datos atípicos
+month=1:12
+siz=c(31,28,31,30,31,30,31,31,30,31,30,31)
+
+int_tmax$month=rep(month,siz)
+int_tmin$month=rep(month,siz)
+
+
+ int2_tmax=int_tmax%>%
+  group_by(month)%>%
+  summarise(li=mean(value,na.rm=T)-(3.5*sd(value,na.rm=T)),ls=mean(value,na.rm=T)+(3.5*sd(value,na.rm=T)))
+  
+  int2_tmax=as.data.frame(int2_tmax)
+  int2_tmax=int2_tmax[order(as.numeric(int2_tmax[,1])),]
+
+int2_tmin=int_tmin%>%
+  group_by(month)%>%
+  summarise(li=mean(value,na.rm=T)-(3.5*sd(value,na.rm=T)),ls=mean(value,na.rm=T)+(3.5*sd(value,na.rm=T)))
+
+int2_tmin=as.data.frame(int2_tmin)
+int2_tmin=int2_tmin[order(as.numeric(int2_tmin[,1])),]
+
+
+lim_inf_tmax=rep(rep(int2_tmax[,2],siz),28) 
+lim_sup_tmax=rep(rep(int2_tmax[,3],siz),28) 
+
+pos_inf_tmax=which(int_tmax[,5]<lim_inf_tmax )
+pos_sup_tmax=which(int_tmax[,5]>lim_sup_tmax)
+
+lim_inf_tmin=rep(rep(int2_tmin[,2],siz),28) 
+lim_sup_tmin=rep(rep(int2_tmin[,3],siz),28) 
+
+pos_inf_tmin=which(int_tmin[,5]<lim_inf_tmin)
+pos_sup_tmin=which(int_tmin[,5]>lim_sup_tmin)
+
+
+int_tmax[pos_inf_tmax,5]=lim_inf_tmax[pos_inf_tmax]
+int_tmax[pos_sup_tmax,5]=lim_sup_tmax[pos_sup_tmax]
+
+int_tmin[pos_inf_tmin,5]=lim_inf_tmin[pos_inf_tmin]
+int_tmin[pos_sup_tmin,5]=lim_sup_tmin[pos_sup_tmin]
+
+years=2021:2048
+
+for(j in 1:28){
+  Tmax[[j]][pixel,]=filter(int_tmax,X1==years[j])[,5]
+  Tmin[[j]][pixel,]=filter(int_tmin,X1==years[j])[,5]
+
+
+}
+}
+
+
+
+save(Tmax,Tmin,file=paste0("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/Temperatura.Rdat"))
+print(k)
+
+}
+
+##############################################
+#########Corrección años bisiestos############
+##############################################
+
+modelos <- c("bcc_csm1_1", "bnu_esm", "cccma_canesm2", "gfld_esm2g", "inm_cm4", "ipsl_cm5a_lr", "miroc_miroc5",
+			"mpi_esm_mr", "mri_cgcm3", "ncc_noresm1_m")
+			
+
+
+####Precipitation
+
+años_bisiestos=seq(4,28,4)
+num_pixel <- 8000
+
+
+for(k in 1:10){
+			
+load(paste("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/Precipitation.RDat",sep=""))
+
+for(año in años_bisiestos){
+	for(pixel in 1:num_pixel){
+
+	
+	Prec[[pixel]][año][[1]][60]=unlist(Prec[[pixel]][año])[59]
+	
+	
+					}
+			}
+
+	save(Prec,file=paste0("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/Precipitation.Rdat"))
+print(k)
+}
+
+####Temperaturas
+años_bisiestos=seq(4,28,4)
+num_pixel <- 8199
+
+modelos <- c("bcc_csm1_1", "bnu_esm", "cccma_canesm2", "gfld_esm2g", "inm_cm4", "ipsl_cm5a_lr", "miroc_miroc5",
+             "mpi_esm_mr", "mri_cgcm3", "ncc_noresm1_m")
+
+for(k in 1:10){
+  
+  load(paste("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/Temperatura.RDat",sep=""))
+  
+  Tmax1=list()
+  Tmin1=list()
+  for(pixel in 1:num_pixel){
+    tx=list()
+    tm=list()
+    for(año in 1:28){
+      
+      if(año%in%años_bisiestos){
+        tm[[año]]=c(Tmin[[año]][pixel,][1:59],Tmin[[año]][pixel,][59],Tmin[[año]][pixel,][60:365])
+        tx[[año]]=c(Tmax[[año]][pixel,][1:59],Tmax[[año]][pixel,][59],Tmax[[año]][pixel,][60:365])
+      }else{
+        tm[[año]]=Tmin[[año]][pixel,]
+        tx[[año]]=Tmax[[año]][pixel,]
+      }
+      
+      Tmax1[[pixel]]=tx
+      Tmin1[[pixel]]=tm
+      
+    }
+  }
+  Tmax=Tmax1
+  Tmin=Tmin1
+  save(Tmax,Tmin,file=paste0("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/Temperatura.Rdat"))
+  
+  print(k)
+}
+
+
+
+
+#####Radiacion solar
+
+
+años_bisiestos=seq(4,28,4)
+num_pixel <- 8000
+
+
+for(k in 1:10){
+			
+load(paste("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/Srad.RDat",sep=""))
+
+for(año in años_bisiestos){
+	for(pixel in 1:num_pixel){
+
+	
+	Srad[[pixel]][año][[1]][60]=unlist(Srad[[pixel]][año])[59]
+	
+	
+					}
+			}
+
+	save(Srad,file=paste0("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/14-ObjectsR/",modelos[k],"/Futuro/Srad.Rdat"))
+print(k)
+}
+
+
+
+#######################################################################################
+#############Corrección datos WDF######################################################
+#######################################################################################
+
+			
+load("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/wfd/ValorWFD.RDat")
+
+num_pixel <- 8199
+num_años <- 30
+
+error <- array(NA, dim = c(8199, 30)) 
+for(año in 1:num_años) {
+
+	for(pixel in 1:num_pixel) {
+	
+	    srad <- Srad[[año]][pixel,]/11.5740741
+		pos=which(srad<1.5)
+		#srad[pos]=1.5
+		#Srad[[año]][pixel,]=srad
+			    error[pixel, año] <- length(pos)
+
+    }
+	
+}
+
+
+num_pixel <- 8199
+num_años <- 30
+
+for(año in 1:num_años) {
+
+	for(pixel in 1:num_pixel) {
+	
+	    prec <- Prec[[año]][pixel,]*86400
+		pos=which(prec<0)
+		#prec[pos]=0
+		#Prec[[año]][pixel,]=prec
+		error[pixel, año] <- length(pos)
+    }
+	
+}
+
+
+
+num_pixel <- 8199
+num_años <- 30
+
+for(año in 1:num_años) {
+
+	for(pixel in 1:num_pixel) {
+	
+	    Tmax <- TempMax[[año]][pixel, ]
+		Tmin <- TempMin[[año]][pixel, ]
+      
+	    error[pixel, año] <- length(which ( Tmax < Tmin ) )
+		
+    }
+	
+}
+################################################
+##Proyecto BID corrección data temperaturas
+################################################
+
+#install.packages("readr")
+#install.packages("tidyr")
+#install.packages("dplyr")
+install.packages("plyr")
+
+library(readr)
+library(tidyr)
+library(dplyr)
+library(plyr)
+library(reshape)
+
+set.seed(1000)
+siz_y=c(365, 366, 365, 365, 365 ,366 ,365, 365 ,365 ,366, 365 ,365 ,365 ,366, 365, 365 ,365 ,366 ,365,365 ,365 ,366 ,365 ,365 ,365 ,366, 365 ,365, 365, 366)
+
+Tmax=list()
+Tmin=list()
+for(j in 1:30){
+  Tmax[[j]]= matrix(NA, nrow = 8199 ,ncol=siz_y[j])
+  Tmin[[j]]=matrix(NA, nrow = 8199 ,ncol=siz_y[j])
+}
+
+			
+
+num_pixel <- 8199
+num_años <- 30
+
+for( pixel in 1:num_pixel){
+
+Tmax_all=list()
+Tmin_all=list()
+
+for(año in 1:num_años) {
+  
+  Tmax_all[[año]]<- TempMax[[año]][pixel,]-273.15
+  Tmin_all[[año]]<- TempMin[[año]][pixel,]-273.15
+}
+
+
+int_tmax= as.data.frame(unlist(Tmax_all))
+names(int_tmax)="value"
+int_tmin= as.data.frame(unlist(Tmin_all))
+names(int_tmin)="value"
+siz_y=c(365, 366, 365, 365, 365 ,366 ,365, 365 ,365 ,366, 365 ,365 ,365 ,366, 365, 365 ,365 ,366 ,365,365 ,365 ,366 ,365 ,365 ,365 ,366, 365 ,365, 365, 366)
+
+int_tmax$year=rep(1971:2000,siz_y)
+int_tmin$year=rep(1971:2000,siz_y)
+ 
+####Identificacion de casos con tmin>tmax
+pos=which(int_tmax[,1] < int_tmin[,1])
+
+if(length(pos)>0){
+dif=0
+
+for(i in 1:length(pos)){
+  pos_f=c(pos[i]-c(1:5),pos[i]+c(1:5))
+  dif=mean(abs(int_tmax[pos_f[which(pos_f>0 & pos_f<=nrow(int_tmax))],1]-int_tmin[pos_f[which(pos_f>0 & pos_f<=nrow(int_tmin))],1]),na.rm=T)
+  int_tmax[pos[i],1]=int_tmin[pos[i],1]+runif(1,0,dif/2)
+  int_tmin[pos[i],1]=int_tmax[pos[i],1]-runif(1,0,dif/2)
+  }
+
+}
+   
+###Identificación de datos atípicos
+month=1:12
+siz=c(31,28,31,30,31,30,31,31,30,31,30,31)
+siz2=c(31,29,31,30,31,30,31,31,30,31,30,31)
+siz_f=c(siz,siz2,rep(siz,3),siz2,rep(siz,3),siz2,rep(siz,3),siz2,rep(siz,3),siz2,rep(siz,3),siz2,rep(siz,3),siz2,rep(siz,3),siz2)
+
+int_tmax$month=rep(rep(month,30),siz_f)
+int_tmin$month=rep(rep(month,30),siz_f)
+
+
+  interv=function(x){
+  res=cbind(li=mean(x,na.rm=T)-(3.5*sd(x,na.rm=T)),ls=mean(x,na.rm=T)+(3.5*sd(x,na.rm=T)))
+return(res)
+  }
+  
+ int2_tmax= aggregate(int_tmax[,1],list(int_tmax$month),interv)
+ int2_tmin= aggregate(int_tmin[,1],list(int_tmin$month),interv)
+  
+  
+lim_inf_tmax=rep(rep(int2_tmax[,2][,1],30),siz_f) 
+lim_sup_tmax=rep(rep(int2_tmax[,2][,2],30),siz_f) 
+
+pos_inf_tmax=which(int_tmax[,1]<lim_inf_tmax )
+pos_sup_tmax=which(int_tmax[,1]>lim_sup_tmax)
+
+lim_inf_tmin=rep(rep(int2_tmin[,2][,1],30),siz_f) 
+lim_sup_tmin=rep(rep(int2_tmin[,2][,2],30),siz_f) 
+
+pos_inf_tmin=which(int_tmin[,1]<lim_inf_tmin)
+pos_sup_tmin=which(int_tmin[,1]>lim_sup_tmin)
+
+
+int_tmax[pos_inf_tmax,1]=lim_inf_tmax[pos_inf_tmax]
+int_tmax[pos_sup_tmax,1]=lim_sup_tmax[pos_sup_tmax]
+
+int_tmin[pos_inf_tmin,1]=lim_inf_tmin[pos_inf_tmin]
+int_tmin[pos_sup_tmin,1]=lim_sup_tmin[pos_sup_tmin]
+
+years=1971:2000
+
+for(j in 1:30){
+  Tmax[[j]][pixel,]=filter(int_tmax,year==years[j])[,1]
+  Tmin[[j]][pixel,]=filter(int_tmin,year==years[j])[,1]
+
+
+}
+}
+
+
+
+save(Srad,Prec,Tmax,Tmin,file=paste0("/mnt/workspace_cluster_3/bid-cc-agricultural-sector/14-ObjectsR/wfd/WDF_all_new.Rdat"))
+
+
+
+
+
